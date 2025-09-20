@@ -1,27 +1,75 @@
 import { useState, useEffect } from "react";
 import { Search, Filter, Clock, Heart, MessageSquare, Bookmark, Plus } from "lucide-react";
-import { SignedIn, SignedOut } from "@clerk/clerk-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { mockBlogPosts, mockCategories } from "@/data/mock-data";
+import { mockCategories } from "@/data/mock-data";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Blog() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [allPosts, setAllPosts] = useState(mockBlogPosts);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user-created posts from localStorage
-    const userPosts = JSON.parse(localStorage.getItem("userBlogPosts") || "[]");
-    setAllPosts([...userPosts, ...mockBlogPosts]);
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+    fetchPosts();
   }, []);
 
-  const filteredPosts = allPosts.filter(post => {
+  const fetchPosts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('blogs')
+        .select(`
+          *,
+          profiles!inner(full_name, avatar_url)
+        `)
+        .eq('status', 'published')
+        .order('published_at', { ascending: false });
+
+      if (error) throw error;
+      
+      // Get likes and comments counts separately
+      const postsWithCounts = await Promise.all(
+        (data || []).map(async (post) => {
+          const [likesResult, commentsResult] = await Promise.all([
+            supabase
+              .from('likes')
+              .select('id', { count: 'exact' })
+              .eq('blog_id', post.id),
+            supabase
+              .from('comments')
+              .select('id', { count: 'exact' })
+              .eq('blog_id', post.id)
+          ]);
+          
+          return {
+            ...post,
+            likes_count: likesResult.count || 0,
+            comments_count: commentsResult.count || 0
+          };
+        })
+      );
+      
+      setPosts(postsWithCounts);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredPosts = posts.filter(post => {
     const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          post.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "all" || post.category === selectedCategory;
@@ -43,26 +91,26 @@ export default function Blog() {
                   Discover expert articles, tips, and strategies to accelerate your professional growth.
                 </p>
               </div>
-              <SignedIn>
+              {user && (
                 <Link to="/create-blog">
                   <Button className="hero-gradient hidden sm:flex items-center gap-2">
                     <Plus className="w-4 h-4" />
                     Write Article
                   </Button>
                 </Link>
-              </SignedIn>
+              )}
             </div>
             
-            <SignedOut>
+            {!user && (
               <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-lg p-4 mb-8">
                 <p className="text-center text-sm text-muted-foreground">
                   Want to share your career insights? 
-                  <Link to="/blog" className="text-primary hover:underline ml-1">
+                  <Link to="/auth" className="text-primary hover:underline ml-1">
                     Sign up to start writing
                   </Link>
                 </p>
               </div>
-            </SignedOut>
+            )}
             
             {/* Search and Filter */}
             <div className="flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto">
@@ -103,7 +151,7 @@ export default function Blog() {
             <Card key={post.id} className="group cursor-pointer hover-lift shadow-card hover:shadow-hover transition-smooth border-0 bg-card/50 backdrop-blur-sm">
               <div className="relative overflow-hidden rounded-t-lg">
                 <img
-                  src={post.image}
+                  src={post.image_url}
                   alt={post.title}
                   className="w-full h-48 object-cover group-hover:scale-105 transition-smooth"
                 />
@@ -122,19 +170,21 @@ export default function Blog() {
               </div>
               
               <CardContent className="p-6">
-                <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="w-6 h-6">
-                      <AvatarImage src={post.author.avatar} />
-                      <AvatarFallback>{post.author.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <span>{post.author.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    <span>{post.readTime} min</span>
-                  </div>
+            <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Avatar className="w-6 h-6">
+                    <AvatarImage src={post.profiles?.avatar_url} />
+                    <AvatarFallback>
+                      {post.profiles?.full_name?.[0] || 'A'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>{post.profiles?.full_name || 'Anonymous'}</span>
                 </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  <span>{Math.ceil(post.content.split(' ').length / 200)} min</span>
+                </div>
+              </div>
 
                 <Link to={`/blog/${post.id}`}>
                   <h3 className="text-lg font-heading font-semibold mb-3 group-hover:text-primary transition-smooth line-clamp-2">
@@ -147,16 +197,16 @@ export default function Blog() {
                 </p>
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Heart className="w-4 h-4" />
-                      <span>{post.likes}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <MessageSquare className="w-4 h-4" />
-                      <span>{post.comments}</span>
-                    </div>
-                  </div>
+                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                     <div className="flex items-center gap-1">
+                       <Heart className="w-4 h-4" />
+                       <span>{post.likes_count || 0}</span>
+                     </div>
+                     <div className="flex items-center gap-1">
+                       <MessageSquare className="w-4 h-4" />
+                       <span>{post.comments_count || 0}</span>
+                     </div>
+                   </div>
                   
                   <Link to={`/blog/${post.id}`}>
                     <Button variant="ghost" size="sm" className="text-primary hover:text-primary hover:bg-primary/5">

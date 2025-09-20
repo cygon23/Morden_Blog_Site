@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,14 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { X, Save, Upload, Image } from "lucide-react";
+import { X } from "lucide-react";
 import { mockCategories } from "@/data/mock-data";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-export default function CreateBlog() {
+export default function EditBlog() {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
@@ -24,17 +25,57 @@ export default function CreateBlog() {
   const [tags, setTags] = useState<string[]>([]);
   const [currentTag, setCurrentTag] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState<'draft' | 'published'>('draft');
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      setLoading(false);
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
     };
     getUser();
-  }, []);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (id && user) {
+      fetchBlogPost();
+    }
+  }, [id, user]);
+
+  const fetchBlogPost = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('blogs')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id) // Ensure user can only edit their own posts
+        .single();
+
+      if (error) throw error;
+
+      setTitle(data.title);
+      setExcerpt(data.excerpt);
+      setContent(data.content);
+      setCategory(data.category);
+      setTags(data.tags || []);
+      setImageUrl(data.image_url || "");
+      setStatus(data.status as 'draft' | 'published');
+    } catch (error) {
+      console.error('Error fetching blog post:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load blog post or you don't have permission to edit it",
+        variant: "destructive",
+      });
+      navigate('/blog');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const addTag = () => {
     if (currentTag.trim() && !tags.includes(currentTag.trim())) {
@@ -47,69 +88,7 @@ export default function CreateBlog() {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
-  const handleImageUpload = async (file: File) => {
-    if (!user) return;
-    
-    setUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('blog-images')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from('blog-images')
-        .getPublicUrl(fileName);
-
-      setImageUrl(data.publicUrl);
-      
-      toast({
-        title: "Image Uploaded!",
-        description: "Your image has been uploaded successfully.",
-      });
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      toast({
-        title: "Upload Error",
-        description: "Failed to upload image. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast({
-          title: "File too large",
-          description: "Please select an image smaller than 5MB.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: "Invalid file type",
-          description: "Please select an image file.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setImageFile(file);
-      handleImageUpload(file);
-    }
-  };
-
-  const handleSave = async (status: 'draft' | 'published') => {
+  const handleSave = async (newStatus: 'draft' | 'published') => {
     if (!title || !excerpt || !content || !category) {
       toast({
         title: "Missing Fields",
@@ -122,32 +101,35 @@ export default function CreateBlog() {
     setSaving(true);
 
     try {
-      const blogData = {
-        user_id: user.id,
+      const updateData: any = {
         title,
         excerpt,
         content,
         category,
         tags,
-        image_url: imageUrl || null,
-        status,
-        published_at: status === 'published' ? new Date().toISOString() : null,
+        image_url: imageUrl,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
       };
 
-      const { data, error } = await supabase
+      if (newStatus === 'published' && status === 'draft') {
+        updateData.published_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
         .from('blogs')
-        .insert(blogData)
-        .select()
-        .single();
+        .update(updateData)
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
       toast({
-        title: status === 'published' ? "Blog Published!" : "Blog Saved!",
-        description: `Your blog post has been ${status === 'published' ? 'published' : 'saved as draft'} successfully.`,
+        title: newStatus === 'published' ? "Blog Published!" : "Blog Saved!",
+        description: `Your blog post has been ${newStatus === 'published' ? 'published' : 'saved as draft'} successfully.`,
       });
 
-      navigate(`/blog/${data.id}`);
+      navigate(`/blog/${id}`);
     } catch (error) {
       console.error('Error saving blog post:', error);
       toast({
@@ -165,28 +147,8 @@ export default function CreateBlog() {
       <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Loading blog post...</p>
         </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-heading font-bold mb-2">Sign In Required</h2>
-              <p className="text-muted-foreground mb-4">
-                You need to be signed in to create blog posts.
-              </p>
-              <Button onClick={() => navigate("/auth")} className="hero-gradient">
-                Sign In
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -195,19 +157,37 @@ export default function CreateBlog() {
     <div className="min-h-screen bg-gradient-subtle">
       <div className="container-custom section-padding">
         <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate(`/blog/${id}`)}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Post
+            </Button>
+            
+            <div className="flex items-center gap-2">
+              <Badge variant={status === 'published' ? 'default' : 'secondary'}>
+                {status === 'published' ? 'Published' : 'Draft'}
+              </Badge>
+            </div>
+          </div>
+
           <div className="mb-8">
-            <h1 className="text-3xl font-heading font-bold mb-2">Create New Blog Post</h1>
+            <h1 className="text-3xl font-heading font-bold mb-2">Edit Blog Post</h1>
             <p className="text-muted-foreground">
-              Share your career insights and help others grow professionally.
+              Update your article and choose to save as draft or publish.
             </p>
           </div>
 
           <Card className="shadow-card border-0">
             <CardHeader>
-              <CardTitle>Write Your Article</CardTitle>
+              <CardTitle>Edit Your Article</CardTitle>
             </CardHeader>
             <CardContent>
-              <form className="space-y-6">
+              <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="title">Title *</Label>
                   <Input
@@ -250,46 +230,14 @@ export default function CreateBlog() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="image">Featured Image</Label>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="file"
-                          id="image-upload"
-                          accept="image/*"
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => document.getElementById('image-upload')?.click()}
-                          disabled={uploading}
-                          className="w-full"
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          {uploading ? "Uploading..." : "Upload Image"}
-                        </Button>
-                      </div>
-                      {imageUrl && (
-                        <div className="relative">
-                          <img
-                            src={imageUrl}
-                            alt="Featured image preview"
-                            className="w-full h-48 object-cover rounded-md border"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-2 right-2"
-                            onClick={() => setImageUrl("")}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                    <Label htmlFor="image">Featured Image URL</Label>
+                    <Input
+                      id="image"
+                      value={imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      placeholder="https://example.com/image.jpg"
+                      className="bg-background"
+                    />
                   </div>
                 </div>
 
@@ -337,7 +285,6 @@ export default function CreateBlog() {
 
                 <div className="flex gap-4">
                   <Button 
-                    type="button"
                     onClick={() => handleSave('draft')} 
                     variant="outline"
                     disabled={saving}
@@ -346,23 +293,22 @@ export default function CreateBlog() {
                     Save Draft
                   </Button>
                   <Button 
-                    type="button"
-                    onClick={() => handleSave('published')}
+                    onClick={() => handleSave('published')} 
                     className="hero-gradient"
                     disabled={saving}
                   >
-                    {saving ? "Publishing..." : "Publish Article"}
+                    {saving ? "Saving..." : "Publish"}
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => navigate("/blog")}
+                    onClick={() => navigate(`/blog/${id}`)}
                     disabled={saving}
                   >
                     Cancel
                   </Button>
                 </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
         </div>
