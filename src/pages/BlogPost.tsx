@@ -221,6 +221,39 @@ export default function BlogPost() {
     }
   };
 
+  const handleShare = async () => {
+    const shareUrl = window.location.href;
+    const shareTitle = `${post?.title} - CareerNamimi`;
+    const shareText = `Check out this insightful article: "${post?.title}" on CareerNamimi`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (error) {
+        console.error('Error sharing:', error);
+      }
+    } else {
+      // Fallback: copy to clipboard
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: "Link Copied",
+          description: "Article link copied to clipboard",
+        });
+      } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        toast({
+          title: "Share",
+          description: `Share this article: ${shareUrl}`,
+        });
+      }
+    }
+  };
+
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this blog post?")) return;
 
@@ -359,7 +392,7 @@ export default function BlogPost() {
                     <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
                     {likesCount}
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" onClick={handleShare}>
                     <Share2 className="w-4 h-4" />
                   </Button>
                 </div>
