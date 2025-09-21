@@ -134,7 +134,23 @@ export default function Tools() {
                     <Badge variant="outline">{tool.category}</Badge>
                     <span className="text-sm text-muted-foreground">{tool.users} users</span>
                   </div>
-                  <Button className="w-full" variant={tool.status === "premium" ? "default" : "outline"}>
+                  <Button 
+                    className="w-full" 
+                    variant={tool.status === "premium" ? "default" : "outline"}
+                    onClick={() => {
+                      const toolRoutes: { [key: string]: string } = {
+                        'Resume Checker': '/tools/resume-checker',
+                        'Salary Calculator': '/tools/salary-calculator', 
+                        'Skills Assessment': '/tools/skills-assessment',
+                        'Career Path Analyzer': '/tools/career-path',
+                        'Interview Prep': '/tools/interview-prep'
+                      };
+                      const route = toolRoutes[tool.title];
+                      if (route) {
+                        window.location.href = route;
+                      }
+                    }}
+                  >
                     {tool.status === "premium" ? "Start Free Trial" : "Use Tool"}
                   </Button>
                 </CardContent>
