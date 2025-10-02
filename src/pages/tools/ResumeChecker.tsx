@@ -18,6 +18,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+import {
   supabase,
   resumeService,
   authService,
@@ -37,6 +49,40 @@ interface AnalysisResult {
     experience: string;
     skills: string;
   };
+}
+
+function DeleteDialog({ onConfirm }: { onConfirm: () => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant='ghost' size='sm'>
+          <Trash2 className='w-4 h-4' />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Analysis?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. Are you sure you want to delete this
+            analysis?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onConfirm();
+              setOpen(false);
+            }}
+            className='bg-red-600 text-white hover:bg-red-700'>
+            Yes, delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 export default function ResumeChecker() {
@@ -205,8 +251,6 @@ export default function ResumeChecker() {
   };
 
   const handleDeleteAnalysis = async (analysisId: string, fileUrl: string) => {
-    if (!confirm("Are you sure you want to delete this analysis?")) return;
-
     try {
       await resumeService.deleteAnalysis(analysisId, fileUrl);
 
@@ -671,17 +715,14 @@ export default function ResumeChecker() {
                               onClick={() => loadPreviousAnalysis(analysis.id)}>
                               {analysis.overall_score}/100
                             </Button>
-                            <Button
-                              size='sm'
-                              variant='ghost'
-                              onClick={() =>
+                            <DeleteDialog
+                              onConfirm={() =>
                                 handleDeleteAnalysis(
                                   analysis.id,
                                   analysis.file_url
                                 )
-                              }>
-                              <Trash2 className='w-4 h-4' />
-                            </Button>
+                              }
+                            />
                           </>
                         )}
                       {analysis.status === "processing" && (
