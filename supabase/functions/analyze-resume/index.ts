@@ -180,8 +180,6 @@ Return ONLY this JSON structure:
       }
     );
   } catch (error) {
-    console.error("Error analyzing resume:", error);
-
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       {
@@ -225,7 +223,6 @@ async function extractPDFText(data: Uint8Array): Promise<string> {
 
     return "Could not extract text from PDF. Please try a different format.";
   } catch (error) {
-    console.error("PDF extraction error:", error);
     return "Error extracting PDF text. Please use a text-based PDF or try DOCX format.";
   }
 }
@@ -247,7 +244,6 @@ async function extractDOCXText(data: Uint8Array): Promise<string> {
 
     return "Could not extract text from DOCX. Please try PDF format.";
   } catch (error) {
-    console.error("DOCX extraction error:", error);
     return "Error extracting DOCX text. Please try PDF format instead.";
   }
 }
@@ -290,7 +286,7 @@ function parseAIResponse(response: string, resumeText: string): AnalysisResult {
       }
     }
   } catch (error) {
-    console.error("Parse error:", error);
+    // console.error("Parse error:", error);
   }
 
   // Generate intelligent fallback based on resume content
