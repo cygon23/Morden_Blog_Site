@@ -140,17 +140,38 @@ export const resumeService = {
       throw new Error(`Get session failed: ${sessionError.message}`);
     if (!session) throw new Error("No active session found");
 
-    const { data, error } = await supabase.functions.invoke("analyze-resume", {
-      body: { resumeAnalysisId },
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    });
+    // Use direct fetch instead of supabase.functions.invoke
+    const functionUrl = `${supabaseUrl}/functions/v1/analyze-resume`;
 
-    if (error) throw new Error(`Analysis failed: ${error.message}`);
-    return data;
+    try {
+      const response = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: supabaseAnonKey || "",
+        },
+        body: JSON.stringify({ resumeAnalysisId }),
+      });
+
+      const data = await response.json();
+
+      // Now we can access the actual response body even on 400 errors
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || "Analysis failed",
+        };
+      }
+
+      return data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || "Network error occurred",
+      };
+    }
   },
-
   async deleteAnalysis(analysisId: string, fileUrl: string): Promise<void> {
     const { error: storageError } = await supabase.storage
       .from("resumes")

@@ -125,7 +125,6 @@ export default function ResumeChecker() {
         await loadRecentAnalyses(currentUser.id);
       }
     } catch (error) {
-      console.error("Auth check error:", error);
     } finally {
       setLoading(false);
     }
@@ -135,9 +134,7 @@ export default function ResumeChecker() {
     try {
       const analyses = await resumeService.getUserAnalyses(userId, 5);
       setRecentAnalyses(analyses);
-    } catch (error: any) {
-      console.error("Load analyses error:", error);
-    }
+    } catch (error: any) {}
   };
 
   const handleFileUpload = async (
@@ -201,7 +198,6 @@ export default function ResumeChecker() {
         description: `${file.name} is ready for analysis`,
       });
     } catch (error: any) {
-      console.error("Upload error:", error);
       toast({
         title: "Upload Failed",
         description:
@@ -214,41 +210,53 @@ export default function ResumeChecker() {
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!currentAnalysisId) return;
+const handleAnalyze = async () => {
+  if (!currentAnalysisId) return;
 
-    setAnalyzing(true);
-    setAnalysisResult(null);
+  setAnalyzing(true);
+  setAnalysisResult(null);
 
-    try {
-      const result = await resumeService.analyzeResume(currentAnalysisId);
+  try {
+    const result = await resumeService.analyzeResume(currentAnalysisId);
 
-      if (result.success && result.data) {
-        setAnalysisResult(result.data);
+    if (result.success && result.data) {
+      setAnalysisResult(result.data);
 
-        toast({
-          title: "Analysis Complete",
-          description: "Your resume has been analyzed successfully",
-        });
+      toast({
+        title: "Analysis Complete",
+        description: "Your resume has been analyzed successfully",
+      });
 
-        if (user) {
-          await loadRecentAnalyses(user.id);
-        }
-      } else {
-        throw new Error(result.error || "Analysis failed");
+      if (user) {
+        await loadRecentAnalyses(user.id);
       }
-    } catch (error: any) {
-      console.error("Analysis error:", error);
+    } else {
+      // Display the actual error message from the backend
+      const errorMessage = result.error || "Analysis failed";
+      toast({
+        title: "Unable to Analyze Document",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      throw new Error(errorMessage);
+    }
+  } catch (error: any) {
+    // Only show toast if we haven't already shown one above
+    if (
+      !error.message?.includes("words") &&
+      !error.message?.includes("document")
+    ) {
       toast({
         title: "Analysis Failed",
         description:
           error.message || "Failed to analyze resume. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setAnalyzing(false);
     }
-  };
+  } finally {
+    setAnalyzing(false);
+  }
+};
 
   const handleDeleteAnalysis = async (analysisId: string, fileUrl: string) => {
     try {
