@@ -203,14 +203,33 @@ Score 0-100. Be specific.`;
 
     let aiResponse = "";
     let usingFallback = false;
+    let retryCount = 0;
+    const maxRetries = 2;
 
-    try {
-      aiResponse = await callAIAPI(analysisPrompt);
-      console.log("AI Response received:", aiResponse.substring(0, 200));
-    } catch (error) {
-      console.log("AI API failed, using intelligent fallback:", error.message);
-      usingFallback = true;
-      aiResponse = ""; // Will trigger fallback in parseAIResponse
+    while (retryCount <= maxRetries && !usingFallback) {
+      try {
+        console.log(`AI API attempt ${retryCount + 1}/${maxRetries + 1}`);
+        aiResponse = await callAIAPI(analysisPrompt);
+        console.log("AI Response received:", aiResponse.substring(0, 200));
+        break; // Success, exit loop
+      } catch (error) {
+        console.error(
+          `AI API attempt ${retryCount + 1} failed:`,
+          error.message
+        );
+        retryCount++;
+
+        if (retryCount > maxRetries) {
+          console.log("All AI API attempts failed, using intelligent fallback");
+          usingFallback = true;
+          aiResponse = "";
+        } else {
+          // Wait before retry (exponential backoff)
+          await new Promise((resolve) =>
+            setTimeout(resolve, 1000 * retryCount)
+          );
+        }
+      }
     }
 
     const analysisResult: AnalysisResult = parseAIResponse(
@@ -257,7 +276,6 @@ Score 0-100. Be specific.`;
       }
     );
   } catch (error) {
-  
     // Map technical errors to user-friendly messages
     let userMessage =
       "Unable to analyze this document. Please ensure you've uploaded a valid resume or CV.";
@@ -730,50 +748,107 @@ function intelligentTruncate(text: string, maxChars: number): string {
 }
 
 async function callAIAPI(prompt: string): Promise<string> {
-  const API_URL = "https://creepytech-creepy-ai.hf.space/ai/logic";
+  const HF_API_KEY = Deno.env.get("HUGGING_FACE_API_KEY");
 
-  // Ensure prompt is not too large for GET request (URL length limit ~2000 chars)
-  const maxPromptLength = 1400; // Conservative limit for URL encoding
-  const safePrompt =
-    prompt.length > maxPromptLength
-      ? prompt.slice(0, maxPromptLength) + "..."
-      : prompt;
+  if (!HF_API_KEY) {
+    console.error("HUGGING_FACE_API_KEY not found");
+    throw new Error("AI service not configured");
+  }
 
-  const url = `${API_URL}?q=${encodeURIComponent(safePrompt)}&logic=chat`;
+  // Use Meta-Llama-3.1-8B-Instruct - it's reliable and publicly accessible
+  const API_URL =
+    "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3.1-8B-Instruct";
 
-  console.log("API URL length:", url.length);
-  console.log("Prompt length:", safePrompt.length);
+  const systemPrompt = `You are a professional resume analyzer. Return ONLY valid JSON (no markdown, no extra text):
+
+Resume:
+${prompt}
+
+Analyze and return this exact JSON structure:
+{
+  "overall_score": 75,
+  "strengths": ["strength1", "strength2", "strength3", "strength4"],
+  "improvements": ["improvement1", "improvement2", "improvement3", "improvement4"],
+  "sections": [
+    {"section_name": "Format & Design", "score": 80, "feedback": "text", "suggestions": ["s1", "s2"]},
+    {"section_name": "Professional Summary", "score": 70, "feedback": "text", "suggestions": ["s1", "s2"]},
+    {"section_name": "Work Experience", "score": 75, "feedback": "text", "suggestions": ["s1", "s2"]},
+    {"section_name": "Skills & Keywords", "score": 72, "feedback": "text", "suggestions": ["s1", "s2"]},
+    {"section_name": "Education", "score": 85, "feedback": "text", "suggestions": ["s1", "s2"]}
+  ],
+  "detailed_feedback": {
+    "format": "advice",
+    "content": "advice",
+    "keywords": "advice",
+    "experience": "advice",
+    "skills": "advice"
+  }
+}`;
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
+    const response = await fetch(API_URL, {
+      method: "POST",
       headers: {
-        Accept: "application/json, text/plain, */*",
-        "User-Agent": "Mozilla/5.0",
+        Authorization: `Bearer ${HF_API_KEY}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        inputs: systemPrompt,
+        parameters: {
+          max_new_tokens: 1500,
+          temperature: 0.4,
+          top_p: 0.9,
+          return_full_text: false,
+        },
+        options: {
+          wait_for_model: true,
+          use_cache: false,
+        },
+      }),
     });
 
-    console.log("AI API response status:", response.status);
+    console.log("Hugging Face API response status:", response.status);
 
     if (!response.ok) {
-      if (response.status === 431) {
-        throw new Error(
-          "Request too large. Please try uploading a shorter resume or contact support."
-        );
+      const errorText = await response.text();
+      console.error("HF API error details:", errorText);
+
+      // Parse error for better logging
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error("Error:", errorJson.error || errorText);
+      } catch {
+        console.error("Raw error:", errorText);
       }
-      console.error(`AI API error: ${response.status} ${response.statusText}`);
-      throw new Error(
-        `AI service temporarily unavailable (error ${response.status}). Using fallback analysis.`
-      );
+
+      throw new Error(`Hugging Face API error: ${response.status}`);
     }
 
-    const responseText = await response.text();
-    console.log("Raw AI response length:", responseText.length);
+    const result = await response.json();
+    console.log(
+      "HF API response type:",
+      Array.isArray(result) ? "array" : typeof result
+    );
 
-    return responseText;
+    // Extract generated text
+    let generatedText = "";
+    if (Array.isArray(result) && result.length > 0) {
+      generatedText = result[0].generated_text || result[0].text || "";
+    } else if (result.generated_text) {
+      generatedText = result.generated_text;
+    } else if (typeof result === "string") {
+      generatedText = result;
+    }
+
+    if (!generatedText) {
+      console.error("Unexpected response structure:", JSON.stringify(result));
+      throw new Error("No generated text in response");
+    }
+
+    console.log("Generated text preview:", generatedText.substring(0, 200));
+    return generatedText;
   } catch (error) {
-    console.error("AI API call failed:", error.message);
-    // Don't throw - let it fall back to intelligent analysis
+    console.error("Hugging Face API call failed:", error.message);
     throw error;
   }
 }
