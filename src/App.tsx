@@ -25,50 +25,72 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import CreateDiscussion from "./pages/CreateDiscussion.tsx";
+import AllDiscussions from "./pages/AllDiscussions.tsx";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="light" storageKey="careernamimi-theme">
+    <ThemeProvider defaultTheme='light' storageKey='careernamimi-theme'>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <Routes>
             {/* Auth page without navigation and footer */}
-            <Route path="/auth" element={<Auth />} />
-            
+            <Route path='/auth' element={<Auth />} />
+
             {/* All other pages with navigation and footer */}
-            <Route path="*" element={
-              <div className="flex flex-col min-h-screen">
-                <Navigation />
-                <main className="flex-1">
-                  <Routes>
-                    <Route path="/" element={<Index />} />
-                    <Route path="/blog" element={<Blog />} />
-                    <Route path="/blog/:id" element={<BlogPost />} />
-                    <Route path="/create-blog" element={<CreateBlog />} />
-                    <Route path="/edit-blog/:id" element={<EditBlog />} />
-                    <Route path="/about" element={<About />} />
-                    <Route path="/contact" element={<Contact />} />
-                    <Route path="/tools" element={<Tools />} />
-                    <Route path="/tools/resume-checker" element={<ResumeChecker />} />
-                    <Route path="/tools/salary-calculator" element={<SalaryCalculator />} />
-                    <Route path="/tools/skills-assessment" element={<SkillsAssessment />} />
-                    <Route path="/tools/career-path" element={<CareerPath />} />
-                    <Route path="/tools/interview-prep" element={<InterviewPrep />} />
-                    <Route path="/forum" element={<Forum />} />
-                    <Route path="/events" element={<Events />} />
-                    <Route path="/profile" element={<Profile />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="/categories" element={<Blog />} />
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </main>
-                <Footer />
-              </div>
-            } />
+            <Route
+              path='*'
+              element={
+                <div className='flex flex-col min-h-screen'>
+                  <Navigation />
+                  <main className='flex-1'>
+                    <Routes>
+                      <Route path='/' element={<Index />} />
+                      <Route path='/blog' element={<Blog />} />
+                      <Route path='/blog/:id' element={<BlogPost />} />
+                      <Route path='/create-blog' element={<CreateBlog />} />
+                      <Route path='/edit-blog/:id' element={<EditBlog />} />
+                      <Route path='/about' element={<About />} />
+                      <Route path='/contact' element={<Contact />} />
+                      <Route path='/tools' element={<Tools />} />
+                      <Route
+                        path='/tools/resume-checker'
+                        element={<ResumeChecker />}
+                      />
+                      <Route
+                        path='/tools/salary-calculator'
+                        element={<SalaryCalculator />}
+                      />
+                      <Route
+                        path='/tools/skills-assessment'
+                        element={<SkillsAssessment />}
+                      />
+                      <Route
+                        path='/tools/career-path'
+                        element={<CareerPath />}
+                      />
+                      <Route
+                        path='/tools/interview-prep'
+                        element={<InterviewPrep />}
+                      />
+                      <Route path='/forum' element={<Forum />} />
+                      <Route path='/discussions' element={<AllDiscussions />} />
+                      <Route path='/create' element={<CreateDiscussion />} />
+                      <Route path='/events' element={<Events />} />
+                      <Route path='/profile' element={<Profile />} />
+                      <Route path='/settings' element={<Settings />} />
+                      <Route path='/categories' element={<Blog />} />
+                      <Route path='*' element={<NotFound />} />
+                    </Routes>
+                  </main>
+                  <Footer />
+                </div>
+              }
+            />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
