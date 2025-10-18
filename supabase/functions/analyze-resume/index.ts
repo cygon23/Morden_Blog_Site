@@ -747,108 +747,115 @@ function intelligentTruncate(text: string, maxChars: number): string {
   return combined.trim();
 }
 
-async function callAIAPI(prompt: string): Promise<string> {
-  const HF_API_KEY = Deno.env.get("HUGGING_FACE_API_KEY");
 
-  if (!HF_API_KEY) {
-    console.error("HUGGING_FACE_API_KEY not found");
+// Replace the callAIAPI function with this GROQ-compatible version
+
+async function callAIAPI(prompt: string): Promise<string> {
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+
+  if (!GROQ_API_KEY) {
+    console.error("GROQ_API_KEY not found");
     throw new Error("AI service not configured");
   }
 
-  // Use Meta-Llama-3.1-8B-Instruct - it's reliable and publicly accessible
-  const API_URL =
-    "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3.1-8B-Instruct";
+  // Groq uses OpenAI-compatible endpoint
+  const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-  const systemPrompt = `You are a professional resume analyzer. Return ONLY valid JSON (no markdown, no extra text):
+  const systemMessage = `You are a professional resume analyzer. Analyze the resume and return ONLY valid JSON with no markdown formatting, no code blocks, and no additional text.
 
-Resume:
-${prompt}
-
-Analyze and return this exact JSON structure:
+Your response must be a valid JSON object with this exact structure:
 {
   "overall_score": 75,
   "strengths": ["strength1", "strength2", "strength3", "strength4"],
   "improvements": ["improvement1", "improvement2", "improvement3", "improvement4"],
   "sections": [
-    {"section_name": "Format & Design", "score": 80, "feedback": "text", "suggestions": ["s1", "s2"]},
-    {"section_name": "Professional Summary", "score": 70, "feedback": "text", "suggestions": ["s1", "s2"]},
-    {"section_name": "Work Experience", "score": 75, "feedback": "text", "suggestions": ["s1", "s2"]},
-    {"section_name": "Skills & Keywords", "score": 72, "feedback": "text", "suggestions": ["s1", "s2"]},
-    {"section_name": "Education", "score": 85, "feedback": "text", "suggestions": ["s1", "s2"]}
+    {"section_name": "Format & Design", "score": 80, "feedback": "specific feedback text", "suggestions": ["suggestion1", "suggestion2"]},
+    {"section_name": "Professional Summary", "score": 70, "feedback": "specific feedback text", "suggestions": ["suggestion1", "suggestion2"]},
+    {"section_name": "Work Experience", "score": 75, "feedback": "specific feedback text", "suggestions": ["suggestion1", "suggestion2"]},
+    {"section_name": "Skills & Keywords", "score": 72, "feedback": "specific feedback text", "suggestions": ["suggestion1", "suggestion2"]},
+    {"section_name": "Education", "score": 85, "feedback": "specific feedback text", "suggestions": ["suggestion1", "suggestion2"]}
   ],
   "detailed_feedback": {
-    "format": "advice",
-    "content": "advice",
-    "keywords": "advice",
-    "experience": "advice",
-    "skills": "advice"
+    "format": "specific advice on formatting",
+    "content": "specific advice on content quality",
+    "keywords": "specific advice on keywords and ATS optimization",
+    "experience": "specific advice on experience section",
+    "skills": "specific advice on skills section"
   }
-}`;
+}
+
+Provide specific, actionable feedback. Scores should be realistic (0-100). Return ONLY the JSON object.`;
 
   try {
+    console.log("Calling Groq API...");
+
     const response = await fetch(API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${HF_API_KEY}`,
+        Authorization: `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        inputs: systemPrompt,
-        parameters: {
-          max_new_tokens: 1500,
-          temperature: 0.4,
-          top_p: 0.9,
-          return_full_text: false,
-        },
-        options: {
-          wait_for_model: true,
-          use_cache: false,
-        },
+        model: "llama-3.3-70b-versatile", // Fast and powerful model for analysis
+        messages: [
+          {
+            role: "system",
+            content: systemMessage,
+          },
+          {
+            role: "user",
+            content: `Resume to analyze:\n\n${prompt}`,
+          },
+        ],
+        temperature: 0.3, // Lower for more consistent analysis
+        max_completion_tokens: 2000,
+        top_p: 0.9,
+        stream: false,
       }),
     });
 
-    console.log("Hugging Face API response status:", response.status);
+    console.log("Groq API response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("HF API error details:", errorText);
+      console.error("Groq API error details:", errorText);
 
-      // Parse error for better logging
       try {
         const errorJson = JSON.parse(errorText);
-        console.error("Error:", errorJson.error || errorText);
+        console.error(
+          "Error:",
+          errorJson.error?.message || errorJson.error || errorText
+        );
       } catch {
         console.error("Raw error:", errorText);
       }
 
-      throw new Error(`Hugging Face API error: ${response.status}`);
+      throw new Error(`Groq API error: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log(
-      "HF API response type:",
-      Array.isArray(result) ? "array" : typeof result
-    );
+    console.log("Groq API response received");
 
-    // Extract generated text
-    let generatedText = "";
-    if (Array.isArray(result) && result.length > 0) {
-      generatedText = result[0].generated_text || result[0].text || "";
-    } else if (result.generated_text) {
-      generatedText = result.generated_text;
-    } else if (typeof result === "string") {
-      generatedText = result;
+    // Extract the assistant's message (OpenAI-compatible format)
+    if (result.choices && result.choices.length > 0) {
+      const generatedText = result.choices[0].message?.content || "";
+
+      if (!generatedText) {
+        console.error("No content in Groq response");
+        throw new Error("Empty response from Groq API");
+      }
+
+      console.log("Generated text preview:", generatedText.substring(0, 200));
+      return generatedText;
+    } else {
+      console.error(
+        "Unexpected Groq response structure:",
+        JSON.stringify(result)
+      );
+      throw new Error("Invalid response format from Groq API");
     }
-
-    if (!generatedText) {
-      console.error("Unexpected response structure:", JSON.stringify(result));
-      throw new Error("No generated text in response");
-    }
-
-    console.log("Generated text preview:", generatedText.substring(0, 200));
-    return generatedText;
   } catch (error) {
-    console.error("Hugging Face API call failed:", error.message);
+    console.error("Groq API call failed:", error.message);
     throw error;
   }
 }
