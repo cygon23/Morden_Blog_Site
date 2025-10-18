@@ -748,17 +748,9 @@ function intelligentTruncate(text: string, maxChars: number): string {
 }
 
 
-// Replace the callAIAPI function with this GROQ-compatible version
-
 async function callAIAPI(prompt: string): Promise<string> {
   const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
-  if (!GROQ_API_KEY) {
-    console.error("GROQ_API_KEY not found");
-    throw new Error("AI service not configured");
-  }
-
-  // Groq uses OpenAI-compatible endpoint
   const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
   const systemMessage = `You are a professional resume analyzer. Analyze the resume and return ONLY valid JSON with no markdown formatting, no code blocks, and no additional text.
