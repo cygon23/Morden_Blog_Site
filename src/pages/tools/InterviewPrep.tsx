@@ -108,76 +108,69 @@ export default function InterviewPrep() {
     };
   }, []);
 
+
 const initSpeechRecognition = () => {
   if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
     const SpeechRecognition =
       (window as any).webkitSpeechRecognition ||
       (window as any).SpeechRecognition;
     recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = true;
-    recognitionRef.current.interimResults = true;
+    recognitionRef.current.continuous = false; 
+    recognitionRef.current.interimResults = false; 
     recognitionRef.current.lang = "en-US";
-
+    recognitionRef.current.maxAlternatives = 1;
+    
     recognitionRef.current.onresult = (event: any) => {
-      let finalTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + " ";
-        }
-      }
-      if (finalTranscript) {
-        console.log("Captured speech:", finalTranscript);
-        setTranscript((prev) => prev + finalTranscript);
+      const transcript = event.results[0][0].transcript;
+      console.log("Captured speech:", transcript);
+      setTranscript((prev) => prev + transcript + " ");
+      
+      // Auto-restart for continuous listening
+      if (isRecordingRef.current) {
+        setTimeout(() => {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }, 100);
       }
     };
-
-  recognitionRef.current.onerror = (event: any) => {
-    console.error("Speech recognition error:", event.error);
-
-    if (
-      event.error === "not-allowed" ||
-      event.error === "service-not-allowed"
-    ) {
-      toast({
-        title: "Microphone Access Denied",
-        description: "Please allow microphone access",
-        variant: "destructive",
-      });
-      setIsRecording(false);
-      isRecordingRef.current = false;
-      return;
-    }
-
-    if (event.error === "network") {
-      // Stop the infinite loop
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      toast({
-        title: "Microphone Error",
-        description:
-          "Please check your microphone settings and refresh the page. Make sure your microphone is connected and working.",
-        variant: "destructive",
-      });
-    }
-  };
-
-recognitionRef.current.onend = () => {
-  console.log("Recognition ended, isRecording:", isRecordingRef.current);
-  setTimeout(() => {
-    if (isRecordingRef.current) {
-      // Use ref instead of state
-      try {
-        recognitionRef.current.start();
-        console.log("Restarted recognition");
-      } catch (e) {
-        console.log("Could not restart:", e);
+    
+    recognitionRef.current.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      
+      if (event.error === "not-allowed") {
+        toast({
+          title: "Microphone Access Denied",
+          description: "Please allow microphone access",
+          variant: "destructive",
+        });
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        return;
       }
-    }
-  }, 100);
-};
+      
+      // For other errors, just restart
+      if (isRecordingRef.current && event.error !== "aborted") {
+        setTimeout(() => {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }, 300);
+      }
+    };
+    
+    recognitionRef.current.onend = () => {
+      // Restart if still recording
+      if (isRecordingRef.current) {
+        setTimeout(() => {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }, 100);
+      }
+    };
   }
 };
-
   const loadHistory = async () => {
     try {
       const {
@@ -330,14 +323,14 @@ const startRecording = () => {
 
   setTimeout(() => {
     setIsRecording(true);
-    isRecordingRef.current = true; // Add this
+    isRecordingRef.current = true; 
     try {
       recognitionRef.current.start();
       console.log("Recording started successfully");
     } catch (error) {
       console.error("Failed to start recording:", error);
       setIsRecording(false);
-      isRecordingRef.current = false; // Add this
+      isRecordingRef.current = false; 
     }
   }, 100);
 };
@@ -592,6 +585,19 @@ const startRecording = () => {
                     </CardContent>
                   </Card>
                 )}
+                <Card className='bg-amber-50 border-amber-200'>
+                  <CardContent className='p-4'>
+                    <p className='text-sm font-medium mb-2'>
+                      Voice not working? Type your answer:
+                    </p>
+                    <textarea
+                      className='w-full p-3 border rounded-md min-h-[100px] text-sm'
+                      placeholder='Type your answer here...'
+                      value={transcript}
+                      onChange={(e) => setTranscript(e.target.value)}
+                    />
+                  </CardContent>
+                </Card>
                 <div className='flex justify-between'>
                   <Button
                     variant='outline'
