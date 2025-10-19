@@ -179,7 +179,7 @@ export default function Tools() {
               <div className='space-y-4'>
                 <div className='flex justify-center space-x-8 text-sm'>
                   <div className='text-center'>
-                    <div className='font-bold text-2xl text-primary'>150k+</div>
+                    <div className='font-bold text-2xl text-primary'>150+</div>
                     <div className='text-muted-foreground'>Happy Users</div>
                   </div>
                   <div className='text-center'>
